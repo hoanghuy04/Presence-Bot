@@ -134,6 +134,21 @@ process.on('unhandledRejection', (reason) => {
     console.error('[UNHANDLED PROMISE]', reason);
 });
 
+// --- ĐOẠN CODE BỔ SUNG ĐỂ CHẠY FREE TRÊN RENDER WEB SERVICE ---
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Tạo 1 đường dẫn để Render hoặc UptimeRobot ping vào kiểm tra
+app.get('/', (req, res) => {
+    res.send('Selfbot Discord đang chạy ngầm ổn định!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server HTTP ảo đang lắng nghe tại cổng: ${PORT}`);
+});
+// -----------------------------------------------------------
+
 client.login(DISCORD_TOKEN).catch((err) => {
     console.error('\n[ĐĂNG NHẬP THẤT BẠI]', err.message);
     console.error('→ Kiểm tra lại DISCORD_TOKEN trong file .env');

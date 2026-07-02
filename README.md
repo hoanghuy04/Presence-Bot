@@ -69,8 +69,8 @@ Mỗi dòng mới được thêm vào cuối sheet với 3 cột:
 
 | Thời gian | Username | Trạng thái |
 |-----------|----------|------------|
-| 02/07/2026, 08:33:00 | thanhduykx | online |
-| 02/07/2026, 09:15:23 | thanhduykx | offline |
+| 02/07/2026, 08:33:00 | hoanghuy | online |
+| 02/07/2026, 09:15:23 | hoanghuy | offline |
 
 Các giá trị `status` có thể: `online`, `idle` (AFK), `dnd` (Do Not Disturb), `offline`.
 

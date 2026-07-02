@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Secrets - KHÔNG BAO GIỜ commit các file này
+.env
+.env.local
+.env.*.local
+
+# Google Service Account credentials
+credentials.json
+*-credentials.json
+service-account*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local runtime data
+pids
+*.pid
+*.seed

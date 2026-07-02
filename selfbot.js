@@ -1,22 +1,9 @@
-/* =====================================================================
- * DISCORD PRESENCE TRACKER — SELF-BOT
- * =====================================================================
- * CẢNH BÁO: File này sử dụng thư viện discord.js-selfbot-v13 để điều
- * khiển một tài khoản NGƯỜI DÙNG THẬT (user token), không phải bot.
- *
- * Theo Điều khoản Dịch vụ của Discord, việc sử dụng self-bot có thể
- * dẫn đến KHÓA VĨNH VIỄN tài khoản. Hãy cân nhắc rủi ro trước khi
- * triển khai. Discord có hệ thống tự động phát hiện hành vi bất
- * thường và sẽ không khôi phục tài khoản bị cấm.
- * ===================================================================== */
-
 require('dotenv').config();
 
 const { Client } = require('discord.js-selfbot-v13');
-const { auth, sheets_v4 } = require('@googleapis/sheets');
+const googleSheets = require('@googleapis/sheets');
 const path = require('path');
 
-// --- ĐỌC CẤU HÌNH TỪ .ENV ---
 const {
     DISCORD_TOKEN,
     TARGET_USERNAME,
@@ -25,7 +12,6 @@ const {
     TIMEZONE = 'Asia/Ho_Chi_Minh',
 } = process.env;
 
-// --- KIỂM TRA CẤU HÌNH BẮT BUỘC ---
 function fail(message) {
     console.error(`\n[CONFIG ERROR] ${message}\n`);
     console.error('Vui lòng mở file .env và điền đầy đủ các giá trị sau:');
@@ -45,20 +31,19 @@ if (!SHEET_NAME) fail('Chưa cấu hình SHEET_NAME trong file .env');
 
 const client = new Client({ checkUpdate: false });
 
-// --- KHỞI TẠO KẾT NỐI TỚI GOOGLE SHEETS API ---
-const authClient = new auth.JWT({
+const authClient = new googleSheets.auth.JWT({
     keyFile: path.join(__dirname, 'credentials.json'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const sheets = new sheets_v4.Sheets({ auth: authClient });
+const sheets = googleSheets.sheets({ version: 'v4', auth: authClient });
 
-// --- HÀM GHI LOG TRẠNG THÁI LÊN GOOGLE SHEET ---
 async function logStatusToSheets(username, status) {
     const time = new Date().toLocaleString('vi-VN', { timeZone: TIMEZONE });
+    console.log(`[SHEETS] Bắt đầu gọi API append cho: ${username} -> ${status}`);
 
     try {
-        await sheets.spreadsheets.values.append({
+        const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: `${SHEET_NAME}!A:C`,
             valueInputOption: 'USER_ENTERED',
@@ -66,7 +51,7 @@ async function logStatusToSheets(username, status) {
                 values: [[time, username, status]],
             },
         });
-        console.log(`[GHI LOG THÀNH CÔNG] [${time}] ${username} -> ${status}`);
+        console.log(`[GHI LOG THÀNH CÔNG] [${time}] ${username} -> ${status} (HTTP ${response.status})`);
     } catch (error) {
         console.error('[LỖI GOOGLE SHEETS]', error.message);
         if (error.code === 403) {
@@ -77,40 +62,78 @@ async function logStatusToSheets(username, status) {
     }
 }
 
-// --- SỰ KIỆN: BOT SẴN SÀNG ---
 client.on('ready', () => {
     console.log('\n======================================================');
     console.log(`Selfbot đang hoạt động trên tài khoản: ${client.user.tag}`);
     console.log(`Đang theo dõi trạng thái của user: ${TARGET_USERNAME}`);
     console.log('======================================================\n');
+
+    const isSelfTarget = (client.user.username.toLowerCase() === TARGET_USERNAME.toLowerCase()) || (client.user.id === TARGET_USERNAME);
+    if (isSelfTarget) {
+        console.log('⚠️ [CẢNH BÁO] Tài khoản cần theo dõi đang trùng với tài khoản chạy bot!');
+        console.log('  -> Discord không gửi sự kiện presenceUpdate cho chính tài khoản đang đăng nhập.');
+        console.log('  -> Để tự theo dõi chính mình, bạn cần chạy bot bằng tài khoản khác (tài khoản phụ),');
+        console.log('     sau đó kết bạn hoặc ở chung server với tài khoản chính của bạn.\n');
+    }
+
     console.log('Lưu ý: Bạn phải CHIA SẺ CHUNG SERVER với người dùng mục tiêu');
     console.log('       thì mới nhận được sự kiện presenceUpdate.\n');
 });
 
-// --- SỰ KIỆN: TRẠNG THÁI HIỆN DIỆN THAY ĐỔI ---
-client.on('presenceUpdate', (oldPresence, newPresence) => {
-    if (!newPresence || !newPresence.user) return;
+client.on('presenceUpdate', async (oldPresence, newPresence) => {
+    if (!newPresence) return;
 
-    if (newPresence.user.username === TARGET_USERNAME) {
-        const oldStatus = oldPresence ? oldPresence.status : 'offline';
-        const newStatus = newPresence.status;
+    const userId = newPresence.userId;
+    let user = newPresence.user;
 
-        if (oldStatus !== newStatus) {
-            logStatusToSheets(newPresence.user.username, newStatus);
+
+    // Nếu user chưa được cache hoặc thiếu username, thử fetch từ Discord API
+    if (!user || !user.username) {
+        try {
+            user = await client.users.fetch(userId);
+        } catch (err) {
+            // Bỏ qua lỗi nếu không fetch được
+        }
+    }
+
+    const username = user ? user.username : null;
+
+    console.log("user: ", user);
+    const newStatus = newPresence.status;
+    const oldStatus = oldPresence ? oldPresence.status : 'offline';
+
+    if (oldStatus !== newStatus) {
+        const targetLower = TARGET_USERNAME.toLowerCase();
+        const isTarget =
+            (username && username.toLowerCase() === targetLower) ||
+            (userId === TARGET_USERNAME);
+
+        const displayName = username ? `${username}` : `User_${userId}`;
+        console.log(`[DEBUG] Phát hiện trạng thái thay đổi: ${displayName} [ID: ${userId}] (${oldStatus} -> ${newStatus}) | Phù hợp mục tiêu: ${isTarget ? 'ĐÚNG' : 'KHÔNG'}`);
+
+        if (isTarget) {
+            console.log(`🎯 [MỤC TIÊU] Bắt đầu ghi sheet cho: ${username || userId} -> ${newStatus}`);
+            await logStatusToSheets(username || userId, newStatus);
+            console.log(`[INFO] Hoàn thành ghi log cho: ${username || userId}`);
         }
     }
 });
 
-// --- XỬ LÝ LỖI ĐĂNG NHẬP ---
 client.on('error', (err) => {
+    // Ẩn các lỗi spam do thư viện cũ không tương thích hoàn toàn với API mới của Discord
+    if (err.message && err.message.includes("reading 'members'")) {
+        return;
+    }
     console.error('[LỖI DISCORD]', err.message);
 });
 
 process.on('unhandledRejection', (reason) => {
+    if (reason && reason.message && reason.message.includes("reading 'members'")) {
+        return;
+    }
     console.error('[UNHANDLED PROMISE]', reason);
 });
 
-// --- BẮT ĐẦU ĐĂNG NHẬP ---
 client.login(DISCORD_TOKEN).catch((err) => {
     console.error('\n[ĐĂNG NHẬP THẤT BẠI]', err.message);
     console.error('→ Kiểm tra lại DISCORD_TOKEN trong file .env');

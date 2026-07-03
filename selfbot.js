@@ -45,11 +45,12 @@ async function logStatusToSheets(username, eventType, statusAction, platform = '
     try {
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:A`,
+            range: `${SHEET_NAME}!A:I`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
                     time,
+                    username || '',
                     eventType || '',
                     statusAction || '',
                     platform || '',

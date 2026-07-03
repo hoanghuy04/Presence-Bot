@@ -98,23 +98,46 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
 
     const username = user ? user.username : null;
 
-    console.log("user: ", user);
     const newStatus = newPresence.status;
     const oldStatus = oldPresence ? oldPresence.status : 'offline';
 
-    if (oldStatus !== newStatus) {
-        const targetLower = TARGET_USERNAME.toLowerCase();
-        const isTarget =
-            (username && username.toLowerCase() === targetLower) ||
-            (userId === TARGET_USERNAME);
+    // Kiểm tra xem user có phải mục tiêu cần theo dõi không
+    const targetLower = TARGET_USERNAME.toLowerCase();
+    const isTarget =
+        (username && username.toLowerCase() === targetLower) ||
+        (userId === TARGET_USERNAME);
 
-        const displayName = username ? `${username}` : `User_${userId}`;
-        console.log(`[DEBUG] Phát hiện trạng thái thay đổi: ${displayName} [ID: ${userId}] (${oldStatus} -> ${newStatus}) | Phù hợp mục tiêu: ${isTarget ? 'ĐÚNG' : 'KHÔNG'}`);
-
-        if (isTarget) {
-            console.log(`🎯 [MỤC TIÊU] Bắt đầu ghi sheet cho: ${username || userId} -> ${newStatus}`);
+    if (isTarget) {
+        // 1. Kiểm tra thay đổi trạng thái Online / Offline
+        if (oldStatus !== newStatus) {
+            const displayName = username ? `${username}` : `User_${userId}`;
+            console.log(`[DEBUG] Phát hiện trạng thái thay đổi: ${displayName} (${oldStatus} -> ${newStatus})`);
+            console.log(`🎯 [MỤC TIÊU] Ghi trạng thái: ${username || userId} -> ${newStatus}`);
             await logStatusToSheets(username || userId, newStatus);
-            console.log(`[INFO] Hoàn thành ghi log cho: ${username || userId}`);
+        }
+
+        // 2. Kiểm tra thay đổi hoạt động chơi game (Vào game / Thoát game)
+        const oldGameActivity = oldPresence ? oldPresence.activities.find(act => act.type === 'PLAYING') : null;
+        const newGameActivity = newPresence ? newPresence.activities.find(act => act.type === 'PLAYING') : null;
+
+        const oldGame = oldGameActivity ? oldGameActivity.name : null;
+        const newGame = newGameActivity ? newGameActivity.name : null;
+
+        if (oldGame !== newGame) {
+            if (oldGame && !newGame) {
+                // Thoát game
+                console.log(`🎮 [GAME] ${username || userId} đã thoát game: ${oldGame}`);
+                await logStatusToSheets(username || userId, `Thoát game: ${oldGame}`);
+            } else if (!oldGame && newGame) {
+                // Vào game
+                console.log(`🎮 [GAME] ${username || userId} đã vào game: ${newGame}`);
+                await logStatusToSheets(username || userId, `Vào game: ${newGame}`);
+            } else if (oldGame && newGame && oldGame !== newGame) {
+                // Đổi game trực tiếp (ví dụ: chuyển từ game này sang game khác)
+                console.log(`🎮 [GAME] ${username || userId} đổi game: ${oldGame} -> ${newGame}`);
+                await logStatusToSheets(username || userId, `Thoát game: ${oldGame}`);
+                await logStatusToSheets(username || userId, `Vào game: ${newGame}`);
+            }
         }
     }
 });

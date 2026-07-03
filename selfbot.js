@@ -45,12 +45,11 @@ async function logStatusToSheets(username, eventType, statusAction, platform = '
     try {
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:I`,
+            range: `${SHEET_NAME}!A:H`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
                     time,
-                    username || '',
                     eventType || '',
                     statusAction || '',
                     platform || '',
@@ -150,6 +149,7 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
         // 2. Kiểm tra thay đổi hoạt động chơi game (Vào game / Thoát game / Cập nhật game)
         const oldGameActivity = oldPresence ? oldPresence.activities.find(act => act.type === 'PLAYING') : null;
         const newGameActivity = newPresence ? newPresence.activities.find(act => act.type === 'PLAYING') : null;
+        console.log("newPresence", newPresence);
 
         const oldGame = oldGameActivity ? oldGameActivity.name : null;
         const newGame = newGameActivity ? newGameActivity.name : null;

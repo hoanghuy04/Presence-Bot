@@ -214,16 +214,7 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
             } else if (oldGame && newGame && oldGame === newGame && (oldDetails !== newDetails || oldState !== newState)) {
                 // Cập nhật thông tin trong game (ví dụ: số người trong trận, chế độ đấu, bản đồ)
                 console.log(`🎮 [GAME UPDATE] ${username || userId} cập nhật game: ${newGame} | Details: ${newDetails || 'không'} | State: ${newState || 'không'}`);
-                await logStatusToSheets(
-                    username || userId,
-                    'Chơi game',
-                    'Cập nhật game',
-                    getPlatform(newPresence, newGameActivity),
-                    guildName,
-                    newGame,
-                    newDetails || '',
-                    newState || ''
-                );
+                // Không ghi cập nhật game vào Google Sheets để tránh tràn/bành trướng file Excel
             }
         }
     }

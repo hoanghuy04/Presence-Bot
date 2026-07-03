@@ -38,20 +38,30 @@ const authClient = new googleSheets.auth.JWT({
 
 const sheets = googleSheets.sheets({ version: 'v4', auth: authClient });
 
-async function logStatusToSheets(username, status) {
+async function logStatusToSheets(username, eventType, statusAction, platform = '', guildName = '', gameName = '', gameDetails = '', gameState = '') {
     const time = new Date().toLocaleString('vi-VN', { timeZone: TIMEZONE });
-    console.log(`[SHEETS] Bắt đầu gọi API append cho: ${username} -> ${status}`);
+    console.log(`[SHEETS] Bắt đầu gọi API append cho: ${username} | ${eventType} | ${statusAction}`);
 
     try {
         const response = await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:C`,
+            range: `${SHEET_NAME}!A:I`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
-                values: [[time, username, status]],
+                values: [[
+                    time,
+                    username || '',
+                    eventType || '',
+                    statusAction || '',
+                    platform || '',
+                    guildName || '',
+                    gameName || '',
+                    gameDetails || '',
+                    gameState || ''
+                ]],
             },
         });
-        console.log(`[GHI LOG THÀNH CÔNG] [${time}] ${username} -> ${status} (HTTP ${response.status})`);
+        console.log(`[GHI LOG THÀNH CÔNG] [${time}] ${username} -> ${statusAction} (HTTP ${response.status})`);
     } catch (error) {
         console.error('[LỖI GOOGLE SHEETS]', error.message);
         if (error.code === 403) {
@@ -108,35 +118,111 @@ client.on('presenceUpdate', async (oldPresence, newPresence) => {
         (userId === TARGET_USERNAME);
 
     if (isTarget) {
+        const getPlatform = (presence, activity) => {
+            if (activity && activity.platform) return activity.platform;
+            if (presence && presence.clientStatus) {
+                return Object.keys(presence.clientStatus).join(', ');
+            }
+            return '';
+        };
+
+        const guildName = newPresence.guild ? newPresence.guild.name : '';
+
         // 1. Kiểm tra thay đổi trạng thái Online / Offline
         if (oldStatus !== newStatus) {
             const displayName = username ? `${username}` : `User_${userId}`;
             console.log(`[DEBUG] Phát hiện trạng thái thay đổi: ${displayName} (${oldStatus} -> ${newStatus})`);
             console.log(`🎯 [MỤC TIÊU] Ghi trạng thái: ${username || userId} -> ${newStatus}`);
-            await logStatusToSheets(username || userId, newStatus);
+
+            const platform = getPlatform(newPresence, null);
+            await logStatusToSheets(
+                username || userId,
+                'Trạng thái',
+                newStatus,
+                platform,
+                guildName,
+                '',
+                '',
+                ''
+            );
         }
 
-        // 2. Kiểm tra thay đổi hoạt động chơi game (Vào game / Thoát game)
+        // 2. Kiểm tra thay đổi hoạt động chơi game (Vào game / Thoát game / Cập nhật game)
         const oldGameActivity = oldPresence ? oldPresence.activities.find(act => act.type === 'PLAYING') : null;
         const newGameActivity = newPresence ? newPresence.activities.find(act => act.type === 'PLAYING') : null;
 
         const oldGame = oldGameActivity ? oldGameActivity.name : null;
         const newGame = newGameActivity ? newGameActivity.name : null;
 
-        if (oldGame !== newGame) {
-            if (oldGame && !newGame) {
+        const oldDetails = oldGameActivity ? oldGameActivity.details : null;
+        const newDetails = newGameActivity ? newGameActivity.details : null;
+
+        const oldState = oldGameActivity ? oldGameActivity.state : null;
+        const newState = newGameActivity ? newGameActivity.state : null;
+
+        if (oldGame !== newGame || oldDetails !== newDetails || oldState !== newState) {
+            if (!oldGame && newGame) {
+                // Vào game
+                console.log(`🎮 [GAME] ${username || userId} đã vào game: ${newGame} | Chi tiết: ${newDetails || 'không'} | Trạng thái: ${newState || 'không'}`);
+                await logStatusToSheets(
+                    username || userId,
+                    'Chơi game',
+                    'Vào game',
+                    getPlatform(newPresence, newGameActivity),
+                    guildName,
+                    newGame,
+                    newDetails || '',
+                    newState || ''
+                );
+            } else if (oldGame && !newGame) {
                 // Thoát game
                 console.log(`🎮 [GAME] ${username || userId} đã thoát game: ${oldGame}`);
-                await logStatusToSheets(username || userId, `Thoát game: ${oldGame}`);
-            } else if (!oldGame && newGame) {
-                // Vào game
-                console.log(`🎮 [GAME] ${username || userId} đã vào game: ${newGame}`);
-                await logStatusToSheets(username || userId, `Vào game: ${newGame}`);
+                await logStatusToSheets(
+                    username || userId,
+                    'Chơi game',
+                    'Thoát game',
+                    getPlatform(oldPresence, oldGameActivity),
+                    guildName,
+                    oldGame,
+                    oldDetails || '',
+                    oldState || ''
+                );
             } else if (oldGame && newGame && oldGame !== newGame) {
                 // Đổi game trực tiếp (ví dụ: chuyển từ game này sang game khác)
                 console.log(`🎮 [GAME] ${username || userId} đổi game: ${oldGame} -> ${newGame}`);
-                await logStatusToSheets(username || userId, `Thoát game: ${oldGame}`);
-                await logStatusToSheets(username || userId, `Vào game: ${newGame}`);
+                await logStatusToSheets(
+                    username || userId,
+                    'Chơi game',
+                    'Thoát game',
+                    getPlatform(oldPresence, oldGameActivity),
+                    guildName,
+                    oldGame,
+                    oldDetails || '',
+                    oldState || ''
+                );
+                await logStatusToSheets(
+                    username || userId,
+                    'Chơi game',
+                    'Vào game',
+                    getPlatform(newPresence, newGameActivity),
+                    guildName,
+                    newGame,
+                    newDetails || '',
+                    newState || ''
+                );
+            } else if (oldGame && newGame && oldGame === newGame && (oldDetails !== newDetails || oldState !== newState)) {
+                // Cập nhật thông tin trong game (ví dụ: số người trong trận, chế độ đấu, bản đồ)
+                console.log(`🎮 [GAME UPDATE] ${username || userId} cập nhật game: ${newGame} | Details: ${newDetails || 'không'} | State: ${newState || 'không'}`);
+                await logStatusToSheets(
+                    username || userId,
+                    'Chơi game',
+                    'Cập nhật game',
+                    getPlatform(newPresence, newGameActivity),
+                    guildName,
+                    newGame,
+                    newDetails || '',
+                    newState || ''
+                );
             }
         }
     }
